@@ -1,0 +1,10 @@
+# Large reference files
+*.pdf
+
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~

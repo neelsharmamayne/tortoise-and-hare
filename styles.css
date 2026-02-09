@@ -1,0 +1,638 @@
+    /* ===== CSS CUSTOM PROPERTIES ===== */
+    /* Living Books-inspired: bright, saturated, playful storybook palette */
+    :root {
+      --wc-cream: #fef9ed;
+      --wc-parchment: #f5e6c8;
+      --wc-warm-white: #fffdf5;
+      --wc-ink: #2a1f0e;
+      --wc-ink-light: #5c4a32;
+
+      --wc-tortoise-shell: #4a8c2a;
+      --wc-tortoise-body: #6aaa48;
+      --wc-tortoise-belly: #e8d374;
+      --wc-hare-fur: #d4884a;
+      --wc-hare-light: #f0b060;
+      --wc-hare-belly: #fce8c8;
+
+      --wc-sky-top: #78c8f0;
+      --wc-sky-bottom: #b8e4f8;
+      --wc-tree-dark: #2d6e1a;
+      --wc-tree-mid: #48a030;
+      --wc-tree-light: #7cc850;
+      --wc-grass: #58b838;
+      --wc-dirt-path: #d4a050;
+      --wc-flower-pink: #f06888;
+      --wc-flower-gold: #f0c830;
+      --wc-sunset-gold: #f8d040;
+      --wc-sunset-pink: #f0a0a0;
+      --wc-finish-red: #e04040;
+
+      --font-story: 'Georgia', 'Times New Roman', serif;
+      --text-size-body: clamp(1.05rem, 2.5vw, 1.4rem);
+      --text-size-title: clamp(2.2rem, 6vw, 4.8rem);
+      --text-size-moral: clamp(1.4rem, 3.5vw, 2.4rem);
+    }
+
+    /* ===== RESET ===== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      overflow-x: hidden;
+      scroll-snap-type: y proximity;
+    }
+
+    body {
+      font-family: var(--font-story);
+      color: var(--wc-ink);
+      background-color: #fef9ed;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== PAPER TEXTURE OVERLAY ===== */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      pointer-events: none;
+      opacity: 0.08;
+      mix-blend-mode: multiply;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* ===== SCENE LAYOUT ===== */
+    .scene {
+      position: relative;
+      width: 100%;
+      min-height: 120vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      isolation: isolate;
+      scroll-snap-align: center;
+      scroll-snap-stop: normal;
+    }
+
+    .scene--title {
+      min-height: 100vh;
+      scroll-snap-align: start;
+    }
+
+    .scene--finish {
+      min-height: 130vh;
+      scroll-snap-align: end;
+    }
+
+    .scene__canvas {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .scene__illustration {
+      width: 100%;
+      height: 100%;
+    }
+
+    .scene__text {
+      position: relative;
+      z-index: 10;
+      max-width: 680px;
+      padding: 1.8rem 2.8rem;
+      text-align: center;
+      background: radial-gradient(ellipse at center, rgba(254, 249, 237, 0.85) 0%, rgba(254, 249, 237, 0.5) 60%, rgba(254, 249, 237, 0) 85%);
+      border-radius: 1.2rem;
+    }
+
+    /* ===== TYPOGRAPHY ===== */
+    .story-text {
+      font-family: var(--font-story);
+      font-size: var(--text-size-body);
+      font-style: italic;
+      color: #3a2818;
+      line-height: 1.9;
+      letter-spacing: 0.02em;
+      text-shadow: 0 1px 2px rgba(58, 40, 24, 0.12);
+    }
+
+    .story-text--moral {
+      font-size: var(--text-size-moral);
+      font-weight: bold;
+      font-style: normal;
+      color: #2a1a08;
+      line-height: 1.6;
+      letter-spacing: 0.03em;
+      text-shadow: 0 1px 3px rgba(58, 40, 24, 0.15);
+    }
+
+    .title-text {
+      font-family: var(--font-story);
+      font-size: var(--text-size-title);
+      font-weight: bold;
+      color: #2a1a08;
+      letter-spacing: 0.04em;
+      line-height: 1.3;
+      text-shadow: 0 2px 4px rgba(58, 40, 24, 0.12);
+    }
+
+    .subtitle-text {
+      font-family: var(--font-story);
+      font-size: clamp(1rem, 2.2vw, 1.2rem);
+      color: var(--wc-ink-light);
+      font-style: italic;
+      margin-top: 1rem;
+      letter-spacing: 0.08em;
+    }
+
+    /* ===== SCENE WATERCOLOR WASH BACKGROUNDS ===== */
+    .scene::before {
+      content: '';
+      position: absolute;
+      inset: -10%;
+      z-index: 0;
+      pointer-events: none;
+      filter: url(#watercolor-bleed);
+      mix-blend-mode: multiply;
+    }
+
+    .scene--title::before {
+      background: radial-gradient(ellipse at 50% 40%, var(--wc-sky-top) 0%, var(--wc-cream) 70%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 60%;
+    }
+
+    .scene--intro::before {
+      background: linear-gradient(180deg, var(--wc-sky-top) 0%, var(--wc-sky-bottom) 50%, var(--wc-grass) 100%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--challenge::before {
+      background: radial-gradient(ellipse at 50% 60%, var(--wc-sunset-gold) 0%, var(--wc-cream) 60%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--race-start::before {
+      background: linear-gradient(180deg, var(--wc-sky-top) 0%, var(--wc-parchment) 100%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--hare-fast::before {
+      background: linear-gradient(90deg, var(--wc-sky-bottom) 0%, var(--wc-sunset-gold) 50%, var(--wc-parchment) 100%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--hare-nap::before {
+      background: radial-gradient(ellipse at 40% 50%, var(--wc-sunset-gold) 0%, var(--wc-parchment) 60%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--tortoise-passes::before {
+      background: linear-gradient(180deg, var(--wc-sunset-pink) 0%, var(--wc-sky-bottom) 100%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--finish::before {
+      background: radial-gradient(ellipse at 50% 50%, var(--wc-sunset-gold) 0%, var(--wc-sunset-pink) 40%, var(--wc-cream) 70%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--training::before {
+      background: linear-gradient(180deg, var(--wc-sky-top) 0%, var(--wc-sky-bottom) 40%, var(--wc-grass) 100%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--hare-stops::before {
+      background: radial-gradient(ellipse at 60% 50%, var(--wc-sunset-gold) 0%, var(--wc-parchment) 50%, var(--wc-cream) 80%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--hare-snacks::before {
+      background: radial-gradient(ellipse at 40% 40%, var(--wc-sunset-pink) 0%, var(--wc-parchment) 50%, var(--wc-cream) 80%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--moral::before {
+      background: radial-gradient(ellipse at 50% 50%, var(--wc-sunset-gold) 0%, var(--wc-sky-bottom) 50%, var(--wc-cream) 80%);
+      opacity: 0;
+      animation: wash-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+
+    .scene--moral {
+      min-height: 100vh;
+    }
+
+    /* ===== SCROLL-DRIVEN ANIMATION KEYFRAMES ===== */
+
+    @keyframes wash-in {
+      from { opacity: 0; transform: scale(0.85); }
+      to { opacity: 0.65; transform: scale(1.05); }
+    }
+
+    @keyframes draw-stroke {
+      from { stroke-dashoffset: var(--path-length); }
+      to { stroke-dashoffset: 0; }
+    }
+
+    @keyframes bloom-fill {
+      0% { fill-opacity: 0; filter: blur(6px); }
+      40% { fill-opacity: 0.5; filter: blur(3px); }
+      100% { fill-opacity: 0.92; filter: blur(0px); }
+    }
+
+    @keyframes reveal-text {
+      0% { opacity: 0; transform: translateY(12px); filter: blur(4px); }
+      60% { opacity: 0.8; transform: translateY(2px); filter: blur(1px); }
+      100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+
+    @keyframes scene-enter {
+      from { opacity: 0; transform: translateY(40px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes float-up {
+      0% { opacity: 0; transform: translateY(0) scale(0.5); }
+      30% { opacity: 0.7; }
+      100% { opacity: 0; transform: translateY(-80px) scale(1.3); }
+    }
+
+    @keyframes speed-lines {
+      from { stroke-dashoffset: 200; opacity: 0; }
+      to { stroke-dashoffset: 0; opacity: 0.5; }
+    }
+
+    @keyframes dust-puff {
+      0% { opacity: 0; transform: scale(0.3) translateX(0); }
+      40% { opacity: 0.35; }
+      100% { opacity: 0; transform: scale(2) translateX(-60px); }
+    }
+
+    @keyframes walk-across {
+      from { transform: translateX(80%); }
+      to { transform: translateX(-30%); }
+    }
+
+    @keyframes confetti-splash {
+      0% { opacity: 0; transform: scale(0) rotate(0deg); }
+      50% { opacity: 0.7; transform: scale(1.3) rotate(200deg); }
+      100% { opacity: 0.4; transform: scale(1) rotate(360deg); }
+    }
+
+    @keyframes moral-reveal {
+      0% { opacity: 0; transform: scale(0.85); filter: blur(6px); }
+      100% { opacity: 1; transform: scale(1); filter: blur(0); }
+    }
+
+    @keyframes title-paint {
+      0% { opacity: 0; transform: scale(0.9); filter: blur(10px); }
+      50% { opacity: 0.6; filter: blur(4px); }
+      100% { opacity: 1; transform: scale(1); filter: blur(0); }
+    }
+
+    @keyframes scroll-hint {
+      0%, 100% { opacity: 0.4; transform: translateY(0); }
+      50% { opacity: 0.8; transform: translateY(8px); }
+    }
+
+    /* ===== ANIMATION BINDINGS ===== */
+
+    .draw-path {
+      animation: draw-stroke linear both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 55%;
+    }
+
+    /* Staggered drawing — each successive path starts slightly later */
+    .draw-path[data-stagger="1"] { animation-range: entry 10% entry 58%; }
+    .draw-path[data-stagger="2"] { animation-range: entry 15% entry 61%; }
+    .draw-path[data-stagger="3"] { animation-range: entry 20% entry 64%; }
+    .draw-path[data-stagger="4"] { animation-range: entry 25% entry 67%; }
+    .draw-path[data-stagger="5"] { animation-range: entry 28% entry 70%; }
+    .draw-path[data-stagger="6"] { animation-range: entry 31% entry 73%; }
+
+    .color-fill {
+      fill-opacity: 0;
+      animation: bloom-fill linear both;
+      animation-timeline: view();
+      animation-range: entry 35% entry 80%;
+    }
+
+    .color-fill[data-stagger="1"] { animation-range: entry 38% entry 82%; }
+    .color-fill[data-stagger="2"] { animation-range: entry 41% entry 84%; }
+    .color-fill[data-stagger="3"] { animation-range: entry 44% entry 86%; }
+    .color-fill[data-stagger="4"] { animation-range: entry 47% entry 88%; }
+
+    .story-text {
+      opacity: 0;
+      animation: reveal-text ease-out both;
+      animation-timeline: view();
+      animation-range: entry 25% entry 70%;
+    }
+
+    .scene__canvas {
+      opacity: 0;
+      animation: scene-enter linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+
+    /* Scene-specific animations */
+    .zzz {
+      animation: float-up 3s ease-in-out infinite;
+    }
+    .zzz:nth-child(2) { animation-delay: 1s; }
+    .zzz:nth-child(3) { animation-delay: 2s; }
+
+    .speed-line {
+      stroke-dasharray: 200;
+      stroke-dashoffset: 200;
+      animation: speed-lines linear both;
+      animation-timeline: view();
+      animation-range: entry 20% entry 65%;
+    }
+
+    .dust {
+      animation: dust-puff linear both;
+      animation-timeline: view();
+      animation-range: entry 25% entry 70%;
+    }
+
+    .walk-motion {
+      animation: walk-across linear both;
+      animation-timeline: view();
+      animation-range: entry 10% contain 90%;
+    }
+
+    .confetti {
+      animation: confetti-splash linear both;
+      animation-timeline: view();
+      animation-range: entry 30% entry 80%;
+    }
+
+    .confetti:nth-child(2) { animation-range: entry 35% entry 82%; }
+    .confetti:nth-child(3) { animation-range: entry 28% entry 78%; }
+    .confetti:nth-child(4) { animation-range: entry 40% entry 85%; }
+    .confetti:nth-child(5) { animation-range: entry 33% entry 83%; }
+
+    .title-anim {
+      animation: title-paint linear both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 55%;
+    }
+
+    .moral-anim {
+      animation: moral-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 35% entry 75%;
+    }
+
+    .scroll-hint {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      animation: scroll-hint 2s ease-in-out infinite;
+      color: var(--wc-ink-light);
+      font-size: 0.85rem;
+      font-style: italic;
+      text-align: center;
+    }
+
+    .scroll-hint svg {
+      display: block;
+      margin: 0.3rem auto 0;
+      width: 20px;
+      height: 20px;
+    }
+
+    /* ===== WATERCOLOR CLASSES ===== */
+    .wc-filter {
+      filter: url(#watercolor);
+    }
+
+    .wc-paint {
+      mix-blend-mode: multiply;
+    }
+
+    /* ===== SIDEBAR RACE PROGRESS TRACKER ===== */
+    .race-tracker {
+      position: fixed;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 200;
+      width: 36px;
+      height: 60vh;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    .race-tracker.visible {
+      opacity: 1;
+    }
+
+    .race-tracker__track {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      transform: translateX(-50%);
+      background: linear-gradient(180deg,
+        var(--wc-dirt-path) 0%,
+        var(--wc-dirt-path) 85%,
+        var(--wc-finish-red) 85%,
+        var(--wc-finish-red) 100%
+      );
+      border-radius: 2px;
+      opacity: 0.5;
+    }
+
+    /* Finish flag at bottom of track */
+    .race-tracker__finish {
+      position: absolute;
+      bottom: -2px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .race-tracker__finish svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Scene dots along the track */
+    .race-tracker__dot {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--wc-parchment);
+      border: 1.5px solid var(--wc-ink-light);
+      opacity: 0.5;
+      transition: opacity 0.3s ease, background 0.3s ease;
+    }
+
+    .race-tracker__dot.active {
+      opacity: 1;
+      background: var(--wc-dirt-path);
+      border-color: var(--wc-ink);
+    }
+
+    /* Mini character racers */
+    .race-tracker__racer {
+      position: absolute;
+      left: 50%;
+      will-change: top;
+      transition: top 0.15s ease-out;
+    }
+
+    .race-tracker__racer--tortoise {
+      transform: translateX(-130%) translateY(-50%);
+    }
+
+    .race-tracker__racer--hare {
+      transform: translateX(30%) translateY(-50%);
+    }
+
+    .race-tracker__racer svg {
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      .race-tracker {
+        left: 6px;
+        width: 28px;
+        height: 50vh;
+      }
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .scene { min-height: 100vh; scroll-snap-align: start; }
+      .scene--finish { min-height: 110vh; }
+      .scene__text { padding: 1.5rem 1rem; max-width: 90%; }
+    }
+
+    /* ===== REDUCED MOTION ===== */
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-snap-type: none !important; }
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .scene, .scene__canvas { opacity: 1 !important; }
+      .draw-path { stroke-dashoffset: 0 !important; }
+      .color-fill { fill-opacity: 0.92 !important; filter: none !important; }
+      .story-text { opacity: 1 !important; filter: none !important; transform: none !important; }
+      .scene::before { opacity: 0.55 !important; transform: none !important; }
+    }
+
+    /* ===== FLOATING CHARACTERS (glide between scenes) ===== */
+    .floating-character {
+      position: fixed;
+      z-index: 100;
+      pointer-events: none;
+      will-change: transform, opacity;
+      transition: none;
+    }
+
+    .floating-character svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    #floating-tortoise {
+      width: clamp(80px, 12vw, 140px);
+      height: clamp(60px, 9vw, 105px);
+    }
+
+    #floating-hare {
+      width: clamp(55px, 8vw, 95px);
+      height: clamp(85px, 12vw, 145px);
+    }
+
+    /* Hide in-scene characters when floating ones are active */
+    .scene-char-hidden {
+      opacity: 0.15 !important;
+      transition: opacity 0.3s ease;
+    }
+
+    /* ===== JS FALLBACK STYLES ===== */
+    .js-scroll-fallback .draw-path {
+      animation: none !important;
+      transition: stroke-dashoffset 0.15s linear;
+    }
+
+    .js-scroll-fallback .color-fill {
+      animation: none !important;
+      transition: fill-opacity 0.2s ease, filter 0.2s ease;
+    }
+
+    .js-scroll-fallback .story-text {
+      animation: none !important;
+      transition: opacity 0.3s ease, transform 0.3s ease, filter 0.3s ease;
+    }
+
+    .js-scroll-fallback .scene__canvas {
+      animation: none !important;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .js-scroll-fallback .scene::before {
+      animation: none !important;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }

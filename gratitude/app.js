@@ -179,7 +179,7 @@
     updateProgress(false);
     renderStreakPill();
     $('mic').hidden = !speechSupported();
-    if (focus !== false) setTimeout(function () { try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); } }, 60);
+    if (focus !== false && $('lock').hidden) setTimeout(function () { try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); } }, 60);
   }
 
   function renderYesterday(last) {
@@ -223,6 +223,16 @@
 
   $('note').addEventListener('input', function () { autosize(this); onInput(); });
   $('note').addEventListener('blur', function () { saveNow(); });
+  document.querySelector('.note').addEventListener('click', function (e) {
+    if (e.target.closest('textarea, a, button')) return;
+    var ta = $('note'); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  });
+  $('views').addEventListener('click', function (e) {
+    if (currentView !== 'today') return;
+    if (e.target === this || e.target === $('view-today')) {
+      var ta = $('note'); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+  });
 
   function updateProgress(justCompleted) {
     var filled = parseNote($('note').value).length;
@@ -285,21 +295,42 @@
     setTimeout(function () { wrap.remove(); }, 3200);
   }
 
-  /* ---------------- VOICE ---------------- */
+  /* ---------------- VOICE ----------------
+     Tries the browser's SpeechRecognition. If it is missing, blocked, or
+     silently does nothing (common inside iOS Home Screen apps), it falls
+     back to the keyboard's own dictation key, which always works. */
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  var rec = null, micWanted = false, micBase = '';
-  function speechSupported() { return !!SR; }
+  var IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var rec = null, micWanted = false, micBase = '', micHeard = false, micWatchdog = null;
+  function speechSupported() { return true; } // the button always does something useful
 
-  function startMic() {
-    if (!SR) return;
+  function newLineForDictation() {
     var ta = $('note');
-    micBase = ta.value.replace(/\s+$/, '');
-    if (micBase) micBase += '\n';   // each mic session starts a new line
+    var v = ta.value.replace(/\s+$/, '');
+    ta.value = v ? v + '\n' : '';
+    autosize(ta);
+    return ta;
+  }
+  function keyboardDictation(reason) {
+    stopMic(true);
+    var ta = newLineForDictation();
+    try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); }
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    hint(reason || (IOS ? 'Tap the 🎤 key on your keyboard to dictate' : 'Use your keyboard’s dictation to speak'), 4200);
+  }
+  function startMic() {
+    if (!SR || !window.isSecureContext) { keyboardDictation(); return; }
+    var ta = newLineForDictation();
+    micBase = ta.value;
+    micHeard = false;
     rec = new SR();
     rec.lang = navigator.language || 'en-US';
     rec.interimResults = true;
-    rec.continuous = true;
+    rec.continuous = !IOS;          // iOS is far more reliable in short sessions
+    rec.maxAlternatives = 1;
+    rec.onaudiostart = function () { micHeard = true; clearTimeout(micWatchdog); hint('Listening… tap the mic again when you’re done', 0); };
     rec.onresult = function (e) {
+      micHeard = true; clearTimeout(micWatchdog);
       var finalText = '', interim = '';
       for (var i = e.resultIndex; i < e.results.length; i++) {
         var t = e.results[i][0].transcript;
@@ -307,34 +338,50 @@
       }
       if (finalText) {
         var line = finalText.replace(/\s+/g, ' ').trim();
-        var lastNL = micBase.lastIndexOf('\n');
-        var lineStart = micBase.slice(lastNL + 1);
+        var lineStart = micBase.slice(micBase.lastIndexOf('\n') + 1);
         if (!lineStart) line = line.charAt(0).toUpperCase() + line.slice(1);
-        micBase = (micBase + (lineStart ? ' ' : '') + line).replace(/[ \t]+/g, ' ');
+        micBase = micBase + (lineStart ? ' ' : '') + line;
       }
-      ta.value = micBase + (interim ? ' ' + interim.trim() : '');
+      ta.value = micBase + (interim ? (micBase.slice(-1) === '\n' || !micBase ? '' : ' ') + interim.trim() : '');
       autosize(ta);
       if (finalText) saveNow();
     };
     rec.onerror = function (e) {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        toast('Microphone blocked. The keyboard’s dictation key works too.');
-        stopMic();
+      var fatal = ['not-allowed', 'service-not-allowed', 'audio-capture', 'network', 'language-not-supported', 'bad-grammar'];
+      if (fatal.indexOf(e.error) !== -1) {
+        keyboardDictation(e.error === 'not-allowed' || e.error === 'service-not-allowed'
+          ? 'Mic blocked for this app. Tap the 🎤 key on your keyboard instead'
+          : null);
       }
+      // 'no-speech' and 'aborted' just fall through to onend, which restarts while wanted.
     };
-    rec.onend = function () { if (micWanted) { try { rec.start(); } catch (err) { stopMic(); } } };
-    try { rec.start(); } catch (e) { toast('Voice input is not available here.'); return; }
+    rec.onend = function () {
+      if (!micWanted) return;
+      if (!micHeard) { keyboardDictation(); return; }   // started, heard nothing at all: hand over
+      try { rec.start(); } catch (err) { stopMic(); }
+    };
+    try { rec.start(); } catch (e) { keyboardDictation(); return; }
     micWanted = true;
     $('mic').classList.add('is-live');
-    $('mic-hint').hidden = false;
+    hint('Listening…', 0);
+    // If nothing happens within 3s (no audio, no error), this platform is not going to cooperate.
+    micWatchdog = setTimeout(function () { if (micWanted && !micHeard) keyboardDictation(); }, 3000);
   }
-  function stopMic() {
+  function stopMic(quiet) {
     micWanted = false;
-    if (rec) { try { rec.onend = null; rec.stop(); } catch (e) { /* ignore */ } rec = null; }
+    clearTimeout(micWatchdog);
+    if (rec) { try { rec.onend = null; rec.abort(); } catch (e) { /* ignore */ } rec = null; }
     $('mic').classList.remove('is-live');
-    $('mic-hint').hidden = true;
+    if (!quiet) hint('', 0);
   }
-  $('mic').addEventListener('click', function () { if (micWanted) stopMic(); else startMic(); });
+  var hintTimer;
+  function hint(msg, ms) {
+    var el = $('mic-hint');
+    clearTimeout(hintTimer);
+    el.textContent = msg; el.hidden = !msg;
+    if (msg && ms) hintTimer = setTimeout(function () { el.hidden = true; }, ms);
+  }
+  $('mic').addEventListener('click', function () { if (micWanted) { stopMic(); saveNow(); } else startMic(); });
 
   /* ---------------- JOURNAL ---------------- */
   function renderJournal() {
@@ -347,7 +394,7 @@
       if (q && !items.some(function (s) { return s.toLowerCase().indexOf(q) !== -1; })) return;
       var m = fmtMonth(k);
       if (m !== month) { month = m; out += '<div class="month">' + esc(m) + '</div>'; }
-      out += '<div class="day"><div class="day__head"><span class="day__date">' + esc(relDay(k)) + '</span>' +
+      out += '<div class="day" data-edit="' + k + '"><div class="day__head"><span class="day__date">' + esc(relDay(k)) + '</span>' +
         '<button type="button" class="day__edit" data-edit="' + k + '">Edit</button></div><ol>' +
         items.map(function (s) {
           var h = esc(s);
@@ -363,6 +410,7 @@
   $('journal').addEventListener('click', function (e) {
     var b = e.target.closest('[data-edit]');
     if (!b) return;
+    if (window.getSelection && String(window.getSelection())) return; // let people copy text
     editingDate = b.dataset.edit;
     show('today');
   });
@@ -608,7 +656,7 @@
     $('lock').hidden = false;
     $('app').setAttribute('aria-hidden', 'true');
   }
-  function hideLock() { $('lock').hidden = true; $('app').removeAttribute('aria-hidden'); lockedAt = 0; }
+  function hideLock() { $('lock').hidden = true; $('app').removeAttribute('aria-hidden'); lockedAt = 0; if (currentView === 'today') renderToday(); }
   $('keypad').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     var pin = load(KEY_PIN, null); if (!pin) { hideLock(); return; }
@@ -666,6 +714,23 @@
     var t = $('toast'); t.textContent = msg; t.hidden = false;
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
   }
+
+  /* ---------------- KEYBOARD + INSTALL HINT ---------------- */
+  if (window.visualViewport) {
+    var baseH = window.visualViewport.height;
+    window.visualViewport.addEventListener('resize', function () {
+      var h = window.visualViewport.height;
+      if (h > baseH) baseH = h;
+      document.body.classList.toggle('kb-open', baseH - h > 150);
+    });
+  }
+  (function installHint() {
+    var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    if (!IOS || standalone || load('tgt.installHintDismissed', false)) return;
+    var el = $('install');
+    el.hidden = false;
+    $('install-close').addEventListener('click', function () { el.hidden = true; save('tgt.installHintDismissed', true); });
+  })();
 
   /* ---------------- SERVICE WORKER ---------------- */
   if ('serviceWorker' in navigator) {

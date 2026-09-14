@@ -81,7 +81,7 @@
             <p class="note__date" id="write-date">Tonight</p>
             <a href="#" class="note__back" id="back-to-today" hidden>&larr; today</a>
           </div>
-          <textarea id="note" class="note__body" rows="4" autofocus autocapitalize="sentences" spellcheck="false"
+          <textarea id="note" class="note__body" rows="4" autocapitalize="sentences" spellcheck="false"
             placeholder="I'm grateful for&hellip; (one thing per line)"></textarea>
           <div class="note__foot">
             <div class="progress" id="progress" aria-hidden="true"></div>
@@ -206,12 +206,19 @@
     </main>
 
     <!-- ===== MIC (floating) ===== -->
-    <button type="button" class="mic" id="mic" aria-label="Speak your gratitude" hidden>
+    <button type="button" class="mic" id="mic" aria-label="Speak your gratitude">
       <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
         <path fill="currentColor" d="M12 15a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4Zm6-4a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93V22h2v-3.07A8 8 0 0 0 20 11h-2Z"/>
       </svg>
     </button>
-    <div class="mic-hint" id="mic-hint" hidden>Listening… tap again to stop</div>
+    <div class="mic-hint" id="mic-hint" hidden></div>
+
+    <!-- ===== INSTALL HINT (iOS Safari, before Add to Home Screen) ===== -->
+    <div class="install" id="install" hidden>
+      <svg viewBox="0 0 64 64" width="34" height="34" aria-hidden="true"><use href="#sun-leaf"/></svg>
+      <p>Add this to your Home Screen for a one-tap journal: tap <strong>Share</strong> <span aria-hidden="true">&#x2191;</span> then <strong>Add to Home Screen</strong>.</p>
+      <button type="button" id="install-close" aria-label="Dismiss">&times;</button>
+    </div>
 
     <!-- ===== TAB BAR ===== -->
     <nav class="tabs" aria-label="Sections">

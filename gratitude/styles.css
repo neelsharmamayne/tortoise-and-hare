@@ -154,7 +154,7 @@ a { color: var(--accent); }
 .btn[disabled] { opacity: .5; pointer-events: none; }
 
 /* ---------- The note (the heart of it) ---------- */
-.note { margin-top: 6px; }
+.note { margin-top: 6px; min-height: 46vh; cursor: text; }
 .note__head { display: flex; justify-content: space-between; align-items: baseline; }
 .note__date {
   margin: 8px 0 2px;
@@ -167,6 +167,7 @@ a { color: var(--accent); }
   display: block;
   width: 100%;
   min-height: 120px;
+  -webkit-tap-highlight-color: transparent;
   border: 0; outline: 0; resize: none;
   background: transparent;
   font-family: var(--font-display);
@@ -236,6 +237,8 @@ a { color: var(--accent); }
 .search:focus { border-color: var(--accent); }
 .month { font-family: var(--font-display); font-size: 15px; color: var(--ink-2); margin: 18px 0 8px; letter-spacing: .02em; }
 .day {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -340,6 +343,27 @@ a { color: var(--accent); }
   background: var(--ink); color: var(--bg);
   padding: 8px 14px; border-radius: 999px; font-size: 13px; z-index: 20;
 }
+
+/* While the keyboard is up, get out of the way (like Notes) */
+body.kb-open .tabs, body.kb-open .mic, body.kb-open .install { display: none; }
+body.kb-open .views { padding-bottom: 40px; }
+
+/* ---------- Install hint ---------- */
+.install {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(80px + var(--safe-bottom));
+  width: calc(100% - 32px); max-width: 528px;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--ink); color: var(--bg);
+  padding: 12px 12px 12px 14px; border-radius: var(--radius);
+  box-shadow: var(--shadow); z-index: 30;
+  animation: pop .35s ease;
+}
+.install p { margin: 0; font-size: 14px; line-height: 1.35; flex: 1; }
+.install strong { color: var(--accent-2); }
+body:has(.install:not([hidden])) .mic { bottom: calc(172px + var(--safe-bottom)); }
+body:has(.install:not([hidden])) .mic-hint { bottom: calc(238px + var(--safe-bottom)); }
+.install button { background: transparent; border: 0; color: var(--bg); font-size: 22px; line-height: 1; padding: 4px 8px; opacity: .7; }
 
 /* ---------- Tabs ---------- */
 .tabs {

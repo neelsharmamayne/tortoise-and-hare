@@ -1,0 +1,17 @@
+{
+  "name": "three-good-things-server",
+  "version": "1.0.0",
+  "description": "Optional self-hosted reminder server for the Three Good Things gratitude journal. Serves the app and sends morning/evening push reminders. Never sees your entries.",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "keys": "node -e \"const w=require('web-push');const k=w.generateVAPIDKeys();console.log('VAPID_PUBLIC_KEY='+k.publicKey);console.log('VAPID_PRIVATE_KEY='+k.privateKey)\""
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "web-push": "^3.6.7"
+  }
+}

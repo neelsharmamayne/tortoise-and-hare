@@ -5,7 +5,8 @@ Three small things every evening; see them again every morning.
 
 - **Private by default.** Everything you write is stored on your phone (browser storage). Nothing is uploaded, there's no account, and no server ever sees an entry.
 - **One tap away.** It's a Progressive Web App (PWA): add it to your Home Screen and it opens full-screen, instantly, offline.
-- **Fast to fill out.** Three numbered lines, autosave as you type, Enter for the next line, and a mic button for talking it out.
+- **As fast as a sticky note.** One note, one line per gratitude. It opens with the cursor already in it, saves as you type, and has a mic button for talking it out. No fields, no buttons, no save step.
+- **Zero-tap capture.** An Action Button or Siri shortcut can dictate a gratitude straight into today's entry without even opening the app's keyboard (see §3).
 - **Morning mode.** Before noon the app opens showing last night's gratitudes (plus one from the archive) so you start the day with them.
 - **Gentle gamification.** Streak counter, a year heatmap, weekly bars, milestone badges, and the words that keep coming up.
 - **Optional passcode** so a borrowed phone doesn't mean a read journal.
@@ -49,7 +50,16 @@ Long-press the icon for shortcuts to *Write tonight's entry* and *Morning reflec
 
 ### Voice
 
-Tap the orange mic to dictate straight into the next empty line (uses the browser's speech recognition; works in Safari and Chrome). Or just use the keyboard's dictation key like you would in Notes.
+Tap the orange mic and talk; each mic session becomes a new line (uses the browser's speech recognition; works in Safari and Chrome). Or use the keyboard's dictation key exactly like you would in Notes. Lines that start with "-", "•" or "1." are cleaned up automatically, so dictating "dash, coffee with Sam" is fine.
+
+### The fastest way in: Action Button / Siri (recommended)
+
+Make a Shortcut called **Gratitude** with two actions:
+
+1. **Dictate Text** (Stop Listening: *On Pause*)
+2. **Open URL** → `https://your-journal-url/?add=` followed by the *Dictated Text* variable (tap the variable → Text → URL Encoded, or add a **URL Encode** action in between)
+
+Then assign it to the **Action Button** (Settings → Action Button → Shortcut) or the **Back Tap** (Accessibility → Touch → Back Tap), and say "Hey Siri, Gratitude" also works. Press, speak, done: the text lands in today's entry and the app flashes "Added ✓". This is faster than opening Notes.
 
 ## 3. Reminders
 

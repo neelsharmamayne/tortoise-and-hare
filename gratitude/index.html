@@ -66,52 +66,27 @@
 
     <main class="views" id="views">
 
-      <!-- ---------- TODAY ---------- -->
+      <!-- ---------- TODAY: one surface, like a note ---------- -->
       <section class="view" id="view-today" data-view="today">
 
-        <!-- Morning reflection mode -->
-        <div class="morning" id="morning" hidden>
-          <p class="eyebrow" id="morning-eyebrow">Good morning</p>
-          <h2 class="title" id="morning-title">Carry these with you today</h2>
-          <p class="muted" id="morning-sub">Last night you were grateful for…</p>
-          <ol class="reflect" id="morning-list"></ol>
-          <div class="archive" id="morning-archive" hidden>
-            <p class="eyebrow">From the archive</p>
-            <p class="archive__date" id="archive-date"></p>
-            <ol class="reflect reflect--small" id="archive-list"></ol>
-          </div>
-          <div class="row">
-            <button type="button" class="btn btn--primary" id="morning-write">Write tonight's entry</button>
-          </div>
+        <!-- Morning: yesterday's gratitudes, quietly, above the note -->
+        <div class="yesterday" id="yesterday" hidden>
+          <p class="eyebrow" id="yesterday-eyebrow">Yesterday you noticed</p>
+          <ol class="reflect" id="yesterday-list"></ol>
+          <p class="archive-line" id="archive-line" hidden></p>
         </div>
 
-        <!-- Writing mode -->
-        <div class="write" id="write">
-          <p class="eyebrow" id="write-date">Today</p>
-          <h2 class="title" id="write-title">What are you grateful for?</h2>
-          <p class="muted" id="write-sub">Three small things are plenty.</p>
-
-          <ol class="entries" id="entries"></ol>
-
-          <div class="row row--between">
-            <button type="button" class="btn btn--ghost" id="add-line">+ one more</button>
-            <span class="saved" id="saved" aria-live="polite"></span>
+        <div class="note">
+          <div class="note__head">
+            <p class="note__date" id="write-date">Tonight</p>
+            <a href="#" class="note__back" id="back-to-today" hidden>&larr; today</a>
           </div>
-
-          <div class="progress" id="progress" aria-hidden="true">
-            <span class="progress__dot"></span><span class="progress__dot"></span><span class="progress__dot"></span>
+          <textarea id="note" class="note__body" rows="4" autofocus autocapitalize="sentences" spellcheck="false"
+            placeholder="I'm grateful for&hellip; (one thing per line)"></textarea>
+          <div class="note__foot">
+            <div class="progress" id="progress" aria-hidden="true"></div>
+            <span class="note__status" id="status" aria-live="polite"></span>
           </div>
-
-          <div class="complete" id="complete" hidden>
-            <div class="complete__card">
-              <p class="complete__title" id="complete-title">Day complete ✨</p>
-              <p class="muted" id="complete-sub">See you in the morning.</p>
-            </div>
-          </div>
-
-          <p class="muted small" id="write-back" hidden>
-            <a href="#" id="back-to-today">← back to today</a>
-          </p>
         </div>
       </section>
 
@@ -185,7 +160,7 @@
             <span>Evening entry</span>
             <input type="time" id="set-evening">
           </label>
-          <p class="muted small">Before noon the app opens in <em>morning mode</em> and shows last night's gratitudes. After that it opens ready to write.</p>
+          <p class="muted small">Before noon, yesterday's gratitudes are shown above the note so you start the day with them.</p>
 
           <div class="divider"></div>
 

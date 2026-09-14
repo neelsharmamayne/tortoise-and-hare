@@ -1,7 +1,7 @@
 /* Three Good Things — service worker
    Caches the app shell so it opens instantly and works offline,
    and shows push reminders sent by the optional reminder server. */
-var CACHE = 'tgt-v1';
+var CACHE = 'tgt-v2';
 var SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {

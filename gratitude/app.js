@@ -121,144 +121,111 @@
   function totalItems() { return doneDays().reduce(function (s, k) { return s + getItems(k).length; }, 0); }
 
   /* ---------------- routing ---------------- */
-  function show(view) {
+  function show(view, focus) {
     currentView = view;
     document.querySelectorAll('.view').forEach(function (el) { el.hidden = el.dataset.view !== view; });
     document.querySelectorAll('.tab').forEach(function (el) { el.classList.toggle('is-active', el.dataset.go === view); });
-    if (view === 'today') renderToday();
+    if (view === 'today') renderToday(focus);
     if (view === 'journal') renderJournal();
     if (view === 'insights') renderInsights();
     if (view === 'settings') renderSettings();
-    $('mic').hidden = !(view === 'today' && !$('write').hidden && speechSupported());
+    $('mic').hidden = !(view === 'today' && speechSupported());
     if (view !== 'today') stopMic();
     window.scrollTo(0, 0);
   }
   document.querySelectorAll('.tab').forEach(function (b) {
-    b.addEventListener('click', function () { editingDate = todayKey(); forceWrite = false; show(b.dataset.go); });
+    b.addEventListener('click', function () { editingDate = todayKey(); showYesterday = false; show(b.dataset.go, false); });
   });
 
-  /* ---------------- TODAY ---------------- */
-  var forceWrite = false;
-  var forceMorning = false;
+  /* ---------------- TODAY: one note ---------------- */
+  var showYesterday = false;
 
   function isMorningHour() {
     var h = new Date().getHours();
     var cutoff = parseInt((settings.evening || '21:00').split(':')[0], 10);
-    // Morning mode: from midnight until noon (or until the evening reminder hour, whichever is earlier).
     return h < Math.min(12, cutoff);
   }
   function lastDoneBefore(k) {
     var days = doneDays().filter(function (d) { return d < k; });
     return days.length ? days[days.length - 1] : null;
   }
-  function shouldShowMorning() {
-    if (forceWrite) return false;
-    if (editingDate !== todayKey()) return false;
-    if (forceMorning) return !!lastDoneBefore(todayKey());
-    return isMorningHour() && !isDone(todayKey()) && !!lastDoneBefore(todayKey());
-  }
-
-  function renderToday() {
-    var morning = shouldShowMorning();
-    $('morning').hidden = !morning;
-    $('write').hidden = morning;
-    $('mic').hidden = morning || !speechSupported();
-    if (morning) renderMorning(); else renderWrite();
-    renderStreakPill();
-  }
-
   function greeting() {
     var h = new Date().getHours();
     var g = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
     return settings.name ? g + ', ' + settings.name : g;
   }
+  function parseNote(text) {
+    return String(text || '').split('\n').map(function (l) {
+      return l.replace(/^\s*(?:[-*•–—]|\d+[.)])\s*/, '').trim();
+    }).filter(Boolean);
+  }
 
-  function renderMorning() {
+  function renderToday(focus) {
+    var k = editingDate, isToday = k === todayKey();
     var last = lastDoneBefore(todayKey());
-    $('morning-eyebrow').textContent = greeting();
-    var isYesterday = last === addDays(todayKey(), -1);
-    $('morning-sub').textContent = isYesterday ? 'Last night you were grateful for…' : 'On ' + fmtLong(last) + ' you were grateful for…';
-    $('morning-list').innerHTML = getItems(last).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
+    var morning = isToday && !!last && (showYesterday || isMorningHour());
+    $('yesterday').hidden = !morning;
+    if (morning) renderYesterday(last);
 
-    // From the archive: a random entry at least a week old, if we have one.
-    var old = doneDays().filter(function (k) { return k < addDays(todayKey(), -7); });
-    var wrap = $('morning-archive');
-    if (old.length) {
-      var seed = fromKey(todayKey()).getTime() / 86400000; // stable pick per day
-      var pick = old[Math.floor(seed) % old.length];
-      $('archive-date').textContent = fmtLong(pick) + ', ' + fromKey(pick).getFullYear();
-      $('archive-list').innerHTML = getItems(pick).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
-      wrap.hidden = false;
-    } else { wrap.hidden = true; }
-  }
+    $('write-date').textContent = isToday
+      ? (isMorningHour() ? 'Today' : 'Tonight') + ' · ' + fmtLong(k)
+      : fmtLong(k);
+    $('back-to-today').hidden = isToday;
 
-  function renderWrite() {
-    var k = editingDate;
-    var isToday = k === todayKey();
-    $('write-date').textContent = isToday ? greeting() + ' · ' + fmtLong(k) : fmtLong(k);
-    $('write-title').textContent = isToday ? 'What are you grateful for today?' : 'What were you grateful for?';
-    $('write-sub').textContent = settings.goal === 1 ? 'One is enough. Whatever comes to mind.' :
-      settings.goal === 5 ? 'Five things, big or small.' : 'Three small things are plenty.';
-    $('write-back').hidden = isToday;
-    buildLines(getItems(k));
-    updateProgress(false);
-  }
-
-  function buildLines(items) {
-    var ol = $('entries');
-    ol.innerHTML = '';
-    var count = Math.max(settings.goal, items.length);
-    for (var i = 0; i < count; i++) addLine(items[i] || '', i);
-  }
-  function addLine(text, i) {
-    var ol = $('entries');
-    var idx = typeof i === 'number' ? i : ol.children.length;
-    if (idx >= 10) return null;
-    var li = document.createElement('li');
-    li.className = 'entry' + (text ? ' is-filled' : '');
-    var dayOfYear = Math.floor((fromKey(editingDate) - new Date(fromKey(editingDate).getFullYear(), 0, 0)) / 86400000);
-    var prompt = PROMPTS[(idx + dayOfYear) % PROMPTS.length];
-    li.innerHTML = '<span class="entry__num">' + (idx + 1) + '.</span>' +
-      '<textarea rows="1" placeholder="' + esc(prompt) + '" enterkeyhint="next" autocapitalize="sentences"></textarea>';
-    var ta = li.querySelector('textarea');
-    ta.value = text;
-    ol.appendChild(li);
+    var ta = $('note');
+    var text = getItems(k).join('\n');
+    if (ta.value !== text) ta.value = text;
     autosize(ta);
-    ta.addEventListener('input', function () { autosize(ta); li.classList.toggle('is-filled', !!ta.value.trim()); onInput(); });
-    ta.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        var next = li.nextElementSibling;
-        if (!next && ta.value.trim()) next = addLine('');
-        if (next) next.querySelector('textarea').focus();
-        else ta.blur();
-      }
-      if (e.key === 'Backspace' && !ta.value && ol.children.length > settings.goal && li === ol.lastElementChild) {
-        e.preventDefault();
-        var prev = li.previousElementSibling;
-        li.remove();
-        if (prev) { var pta = prev.querySelector('textarea'); pta.focus(); pta.setSelectionRange(pta.value.length, pta.value.length); }
-      }
-    });
-    return li;
+    updateProgress(false);
+    renderStreakPill();
+    $('mic').hidden = !speechSupported();
+    if (focus !== false) setTimeout(function () { try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); } }, 60);
   }
-  function autosize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
-  function readLines() {
-    return Array.prototype.map.call($('entries').querySelectorAll('textarea'), function (t) { return t.value; });
+
+  function renderYesterday(last) {
+    var isYesterday = last === addDays(todayKey(), -1);
+    $('yesterday-eyebrow').textContent = greeting() + ' · ' + (isYesterday ? 'last night you noticed' : 'on ' + fmtShort(last) + ' you noticed');
+    $('yesterday-list').innerHTML = getItems(last).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
+    // One line from the archive (at least a week old), stable for the day.
+    var old = doneDays().filter(function (k) { return k < addDays(todayKey(), -7); });
+    var line = $('archive-line');
+    if (old.length) {
+      var pick = old[Math.floor(fromKey(todayKey()).getTime() / 86400000) % old.length];
+      var items = getItems(pick);
+      var item = items[Math.floor(fromKey(todayKey()).getTime() / 86400000) % items.length];
+      var ago = Math.round((fromKey(todayKey()) - fromKey(pick)) / 86400000);
+      line.innerHTML = '<span>' + (ago >= 365 ? Math.floor(ago / 365) + ' year' + (ago >= 730 ? 's' : '') : ago >= 30 ? Math.floor(ago / 30) + ' month' + (ago >= 60 ? 's' : '') : ago + ' days') +
+        ' ago</span> ' + esc(item);
+      line.hidden = false;
+    } else { line.hidden = true; }
   }
+
+  function autosize(ta) { ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 120) + 'px'; }
 
   var saveNow = function () {
     var before = isDone(editingDate);
-    setItems(editingDate, readLines());
-    $('saved').textContent = 'Saved';
-    setTimeout(function () { $('saved').textContent = ''; }, 1500);
+    setItems(editingDate, parseNote($('note').value));
     updateProgress(!before && isDone(editingDate));
     renderStreakPill();
+    flash('Saved');
   };
-  var onInput = debounce(saveNow, 400);
+  var onInput = debounce(saveNow, 350);
+  var statusTimer;
+  function flash(msg) {
+    var el = $('status'); el.textContent = msg;
+    clearTimeout(statusTimer); statusTimer = setTimeout(function () { el.textContent = streakLine(); }, 1400);
+  }
+  function streakLine() {
+    var s = currentStreak();
+    if (!isDone(todayKey())) return s ? s + '-day streak · keep it going' : '';
+    return s >= 2 ? s + ' days in a row' : 'Day one';
+  }
 
-  function updateProgress(justCompletedFirst) {
-    var filled = cleanItems(readLines()).length;
+  $('note').addEventListener('input', function () { autosize(this); onInput(); });
+  $('note').addEventListener('blur', function () { saveNow(); });
+
+  function updateProgress(justCompleted) {
+    var filled = parseNote($('note').value).length;
     var goal = settings.goal;
     var dots = $('progress');
     dots.innerHTML = '';
@@ -267,22 +234,12 @@
       s.className = 'progress__dot' + (i < filled ? ' is-on' : '');
       dots.appendChild(s);
     }
-    var complete = filled >= goal;
-    var box = $('complete');
-    var wasHidden = box.hidden;
-    box.hidden = !complete;
-    if (complete && editingDate === todayKey()) {
-      var streak = currentStreak();
-      $('complete-title').textContent = streak >= 2 ? streak + ' days in a row 🔥' : 'Day complete ✨';
-      $('complete-sub').textContent = streak >= 7 ? 'You’re building something real.' :
-        streak >= 3 ? 'Keep the thread going tomorrow.' : 'See you in the morning.';
-      var celebrated = load(KEY_CELEBRATED, '');
-      if (wasHidden && celebrated !== todayKey()) {
-        save(KEY_CELEBRATED, todayKey());
-        confetti();
-        $('streak-pill').classList.add('bump');
-        setTimeout(function () { $('streak-pill').classList.remove('bump'); }, 600);
-      }
+    $('status').textContent = streakLine();
+    if (filled >= goal && editingDate === todayKey() && load(KEY_CELEBRATED, '') !== todayKey()) {
+      save(KEY_CELEBRATED, todayKey());
+      confetti();
+      $('streak-pill').classList.add('bump');
+      setTimeout(function () { $('streak-pill').classList.remove('bump'); }, 600);
     }
   }
 
@@ -293,11 +250,21 @@
     $('streak-pill').title = s ? s + '-day streak' : 'Start a streak tonight';
   }
 
-  $('add-line').addEventListener('click', function () {
-    var li = addLine('');
-    if (li) li.querySelector('textarea').focus();
-  });
-  $('morning-write').addEventListener('click', function () { forceWrite = true; forceMorning = false; renderToday(); });
+  // Quick capture: ?add=text appends a gratitude to today without touching the keyboard
+  // (for an Action Button / Siri shortcut: Dictate Text -> Open URL).
+  function quickAdd(text) {
+    text = String(text || '').trim();
+    if (!text) return;
+    var items = getItems(todayKey());
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+    if (items.indexOf(text) === -1) items.push(text);
+    setItems(todayKey(), items);
+    editingDate = todayKey();
+    show('today', false);
+    updateProgress(true);
+    toast('Added ✓');
+  }
+
   $('back-to-today').addEventListener('click', function (e) { e.preventDefault(); editingDate = todayKey(); renderToday(); });
   $('streak-pill').addEventListener('click', function () { show('insights'); });
 
@@ -320,21 +287,14 @@
 
   /* ---------------- VOICE ---------------- */
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  var rec = null, micWanted = false, micTarget = null, micBase = '';
+  var rec = null, micWanted = false, micBase = '';
   function speechSupported() { return !!SR; }
 
-  function pickTarget() {
-    var active = document.activeElement;
-    if (active && active.tagName === 'TEXTAREA' && $('entries').contains(active)) return active;
-    var tas = $('entries').querySelectorAll('textarea');
-    for (var i = 0; i < tas.length; i++) if (!tas[i].value.trim()) return tas[i];
-    var li = addLine('');
-    return li ? li.querySelector('textarea') : tas[tas.length - 1];
-  }
   function startMic() {
     if (!SR) return;
-    micTarget = pickTarget();
-    micBase = micTarget.value;
+    var ta = $('note');
+    micBase = ta.value.replace(/\s+$/, '');
+    if (micBase) micBase += '\n';   // each mic session starts a new line
     rec = new SR();
     rec.lang = navigator.language || 'en-US';
     rec.interimResults = true;
@@ -346,23 +306,23 @@
         if (e.results[i].isFinal) finalText += t; else interim += t;
       }
       if (finalText) {
-        micBase = (micBase + ' ' + finalText).replace(/\s+/g, ' ').trim();
-        micBase = micBase.charAt(0).toUpperCase() + micBase.slice(1);
+        var line = finalText.replace(/\s+/g, ' ').trim();
+        var lastNL = micBase.lastIndexOf('\n');
+        var lineStart = micBase.slice(lastNL + 1);
+        if (!lineStart) line = line.charAt(0).toUpperCase() + line.slice(1);
+        micBase = (micBase + (lineStart ? ' ' : '') + line).replace(/[ \t]+/g, ' ');
       }
-      micTarget.value = (micBase + ' ' + interim).replace(/\s+/g, ' ').trim();
-      autosize(micTarget);
-      micTarget.closest('.entry').classList.toggle('is-filled', !!micTarget.value.trim());
+      ta.value = micBase + (interim ? ' ' + interim.trim() : '');
+      autosize(ta);
       if (finalText) saveNow();
     };
     rec.onerror = function (e) {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        toast('Microphone blocked. You can still use the keyboard’s dictation key.');
+        toast('Microphone blocked. The keyboard’s dictation key works too.');
         stopMic();
       }
     };
-    rec.onend = function () {
-      if (micWanted) { try { rec.start(); } catch (err) { stopMic(); } }
-    };
+    rec.onend = function () { if (micWanted) { try { rec.start(); } catch (err) { stopMic(); } } };
     try { rec.start(); } catch (e) { toast('Voice input is not available here.'); return; }
     micWanted = true;
     $('mic').classList.add('is-live');
@@ -404,7 +364,6 @@
     var b = e.target.closest('[data-edit]');
     if (!b) return;
     editingDate = b.dataset.edit;
-    forceWrite = true;
     show('today');
   });
 
@@ -675,7 +634,7 @@
     if (!load(KEY_PIN, null)) return;
     if (document.hidden) { lockedAt = Date.now(); stopMic(); }
     else if (lockedAt && Date.now() - lockedAt > LOCK_AFTER_MS) showLock();
-    else if (!document.hidden) { if (currentView === 'today') renderToday(); }
+    else if (!document.hidden) { if (currentView === 'today') renderToday(false); }
   });
 
   /* ---------------- MODAL + TOAST ---------------- */
@@ -721,17 +680,17 @@
   /* ---------------- BOOT ---------------- */
   function route(v) {
     editingDate = todayKey();
-    forceWrite = v === 'write' || v === 'evening';
-    forceMorning = v === 'morning';
-    show(v === 'journal' || v === 'insights' || v === 'settings' ? v : 'today');
+    showYesterday = v === 'morning';
+    show(v === 'journal' || v === 'insights' || v === 'settings' ? v : 'today', v !== 'morning');
   }
   var params = new URLSearchParams(location.search);
   showLock();
-  route(params.get('view') || '');
-  if (params.has('view')) history.replaceState(null, '', location.pathname);
+  if (params.has('add')) quickAdd(params.get('add'));
+  else route(params.get('view') || '');
+  if (params.has('view') || params.has('add')) history.replaceState(null, '', location.pathname);
 
   // Keep "today" honest if the app stays open past midnight.
   setInterval(function () {
-    if (currentView === 'today' && editingDate !== todayKey() && !forceWrite) { editingDate = todayKey(); renderToday(); }
+    if (currentView === 'today' && editingDate !== todayKey() && $('back-to-today').hidden) { editingDate = todayKey(); renderToday(false); }
   }, 60 * 1000);
 })();

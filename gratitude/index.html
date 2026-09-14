@@ -19,6 +19,7 @@
   <meta name="apple-mobile-web-app-title" content="Gratitude">
 
   <link rel="stylesheet" href="styles.css">
+  <script>try{if(localStorage.getItem('tgt.vault'))document.documentElement.classList.add('locked')}catch(e){}</script>
 </head>
 <body>
 
@@ -30,6 +31,7 @@
       </div>
       <h1 class="lock__title">Three Good Things</h1>
       <p class="lock__hint" id="lock-hint">Enter your passcode</p>
+      <button type="button" class="btn btn--primary lock__bio" id="lock-bio" hidden>Unlock with Face ID</button>
       <div class="lock__dots" id="lock-dots" aria-hidden="true">
         <span></span><span></span><span></span><span></span>
       </div>
@@ -182,16 +184,18 @@
 
         <h3 class="subtitle">Privacy</h3>
         <div class="card">
-          <p class="muted small">Everything you write stays on this device. Nothing is uploaded anywhere.</p>
+          <p class="muted small" id="privacy-status">Entries stay on this device and are never uploaded.</p>
           <div class="row">
             <button type="button" class="btn" id="pin-set">Set a passcode</button>
-            <button type="button" class="btn btn--ghost" id="pin-clear" hidden>Remove passcode</button>
+            <button type="button" class="btn" id="bio-enable" hidden>Add Face ID</button>
+            <button type="button" class="btn btn--ghost" id="bio-disable" hidden>Remove Face ID</button>
+            <button type="button" class="btn btn--ghost" id="pin-clear" hidden>Turn off passcode</button>
           </div>
         </div>
 
         <h3 class="subtitle">Backup</h3>
         <div class="card">
-          <p class="muted small">Because your data lives only on this device, export a backup now and then (it's a small text file).</p>
+          <p class="muted small">Your data lives only on this device, so export a backup now and then. The backup file is readable text, so keep it somewhere private (e.g. iCloud Drive).</p>
           <div class="row">
             <button type="button" class="btn" id="export">Export backup</button>
             <label class="btn btn--ghost" for="import-file">Import backup</label>

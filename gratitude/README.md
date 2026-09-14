@@ -9,10 +9,10 @@ Three good things every evening. See them again every morning.
 
 - **One note, not a form.** The app opens with the cursor already in a lined note. One line per gratitude. It saves as you type. There is no save button, no fields, no "+ add".
 - **Talk instead of type.** Tap the mic and speak; each session becomes a new line. If the browser's speech engine won't cooperate (it often doesn't inside iOS Home Screen apps), the button hands you straight to the keyboard's dictation key, which always works.
-- **Zero-tap capture.** An Action Button or Siri shortcut can dictate a gratitude straight into today's entry without opening the app at all (below).
+- **Quick capture from a shortcut.** A Siri / Action Button shortcut can dictate a gratitude into today's entry via a URL (see §3 for the one iOS caveat).
 - **Mornings.** Before noon, last night's gratitudes and one line from the archive sit quietly above the note, so the day starts with them.
 - **Gentle gamification.** A streak flame, a year heatmap, weekly bars, milestone badges, and the words that keep coming up.
-- **Private by default.** Everything lives on your phone (browser storage). No account, no server, nothing uploaded. Optional passcode. One-tap JSON backup.
+- **Private, properly.** Everything lives on your phone. No account, no server, nothing uploaded. Set a passcode and entries are encrypted on the device (AES-256); unlock with Face ID / Touch ID. Locked means nothing is even in memory.
 - **Installable.** It's a Progressive Web App: add it to the Home Screen and it launches full-screen, instantly, offline, with its own icon.
 
 No build step, no dependencies. `index.html`, `styles.css`, `app.js`, `sw.js`, `manifest.webmanifest`, `icons/`.
@@ -33,15 +33,18 @@ Other options: copy the folder to any HTTPS host, or run the bundled server (§4
 
 Long-press the icon for *Write tonight's entry* and *Morning reflection*.
 
-## 3. The fastest way in: Action Button / Siri
+## 3. Privacy: what "only me" means here
 
-Build a Shortcut called **Gratitude** with two actions:
+- **Entries never leave the phone.** The site only serves the app files. GitHub, the push server, and this repo never see a word you write. Anyone who opens your URL gets an empty journal on *their* device.
+- **Encrypted at rest.** Settings → Privacy → **Set a passcode**. From then on entries are stored AES-256-GCM encrypted. The key is wrapped by your passcode (PBKDF2, 150k rounds) and, if you turn it on, by a secret your phone's Face ID / Touch ID produces (WebAuthn PRF, iOS 18+). While locked nothing is decrypted or held in memory, and the app relocks after two minutes in the background.
+- **No reset.** If you forget the passcode and Face ID is off, the entries cannot be recovered. Export a backup from Settings; the backup file is plain text, so store it somewhere private.
+- **The repo.** Making this repository private doesn't change any of the above (only code lives here), but note GitHub Pages on a private repo needs a paid GitHub plan.
 
-1. **Dictate Text** (Stop Listening: *On Pause*)
-2. **Open URLs** → `https://neelsharmamayne.github.io/gratitude/?add=` and then insert the **Dictated Text** variable. Tap the inserted variable and set it to **URL Encoded** (or put a **URL Encode** action between the two).
+### Dictating from a shortcut (Siri / Action Button)
 
-Assign it to the **Action Button** (Settings → Action Button → Shortcut) or **Back Tap** (Settings → Accessibility → Touch → Back Tap). "Hey Siri, Gratitude" also runs it.
-Press, speak, done. The text lands in today's entry and the app flashes "Added ✓".
+Shortcut **Gratitude**: **Dictate Text** → **Open URLs** `https://neelsharmamayne.github.io/gratitude/?add=` + *Dictated Text* (set the variable to URL Encoded). Assign it to the Action Button or Back Tap; "Hey Siri, Gratitude" works too.
+
+One iOS caveat: Shortcuts opens URLs in **Safari**, and iOS keeps the Home Screen app's storage separate from Safari's. So pick one home for your journal: if you use this shortcut, keep using the journal in Safari (bookmark it); if you use the Home Screen app, the fastest capture is icon → tap the keyboard's 🎤 key, which is two taps and fully reliable. With a passcode set, the shortcut's text waits on the lock screen and is added the moment you unlock.
 
 ## 4. Reminders
 
@@ -70,12 +73,12 @@ Entries live only on the device, so Settings → **Export backup** now and then 
 
 | File | Role |
 |---|---|
-| `app.js` | Entries, streaks, morning strip, voice with fallback, insights, passcode, backup, push subscription, `?add=` quick capture |
+| `app.js` | Entries, streaks, morning strip, voice with fallback, insights, encrypted vault (passcode + Face ID), backup, push subscription, `?add=` quick capture |
 | `sw.js` | Offline cache; push notifications; opens the right screen when a notification is tapped |
 | `manifest.webmanifest` | Installability, icon, Home Screen shortcuts |
 | `server/server.js` | Optional. Static hosting + push reminders. Stores only push subscriptions and times |
 
-Storage format (`localStorage["tgt.entries"]`):
+Storage format without a passcode (`localStorage["tgt.entries"]`); with one, the same JSON lives encrypted inside `tgt.vault`:
 ```json
 { "2026-09-14": { "items": ["Coffee on the porch", "The rain stopped", "Finished the report"], "updatedAt": 1789419600000 } }
 ```

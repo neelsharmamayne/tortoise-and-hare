@@ -9,7 +9,7 @@
   var VERSION = '1.0.0';
   var KEY_ENTRIES = 'tgt.entries';
   var KEY_SETTINGS = 'tgt.settings';
-  var KEY_PIN = 'tgt.pin';
+  var KEY_VAULT = 'tgt.vault';
   var KEY_CELEBRATED = 'tgt.celebrated';
   var LOCK_AFTER_MS = 2 * 60 * 1000;
 
@@ -82,7 +82,7 @@
   function debounce(fn, ms) { var t; return function () { clearTimeout(t); var a = arguments; t = setTimeout(function () { fn.apply(null, a); }, ms); }; }
 
   /* ---------------- state ---------------- */
-  var entries = load(KEY_ENTRIES, {});
+  var entries = {};   // filled by boot() (plaintext) or unlock() (decrypted)
   var settings = Object.assign({
     name: '', goal: 3, morning: '07:30', evening: '21:00', server: '', token: '', pushOn: false
   }, load(KEY_SETTINGS, {}));
@@ -97,7 +97,7 @@
     var clean = cleanItems(items);
     if (clean.length) entries[k] = { items: clean, updatedAt: Date.now() };
     else delete entries[k];
-    save(KEY_ENTRIES, entries);
+    persistEntries();
   }
   function doneDays() { return Object.keys(entries).filter(function (k) { return getItems(k).length > 0; }).sort(); }
   function isDone(k) { return getItems(k).length >= 1; }
@@ -203,6 +203,7 @@
   function autosize(ta) { ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 120) + 'px'; }
 
   var saveNow = function () {
+    if (isLocked()) return;
     var before = isDone(editingDate);
     setItems(editingDate, parseNote($('note').value));
     updateProgress(!before && isDone(editingDate));
@@ -265,6 +266,7 @@
   function quickAdd(text) {
     text = String(text || '').trim();
     if (!text) return;
+    if (isLocked()) { pendingAdd = text; $('lock-hint').textContent = 'Unlock to add what you just said'; return; }
     var items = getItems(todayKey());
     text = text.charAt(0).toUpperCase() + text.slice(1);
     if (items.indexOf(text) === -1) items.push(text);
@@ -496,8 +498,7 @@
     $('set-evening').value = settings.evening;
     $('set-server').value = settings.server;
     $('set-token').value = settings.token;
-    $('pin-set').textContent = load(KEY_PIN, null) ? 'Change passcode' : 'Set a passcode';
-    $('pin-clear').hidden = !load(KEY_PIN, null);
+    renderPrivacy();
     $('version').textContent = 'Three Good Things · v' + VERSION;
     renderPushStatus();
   }
@@ -607,7 +608,7 @@
           items.forEach(function (s) { if (merged.indexOf(s) === -1) merged.push(s); });
           entries[k] = { items: merged, updatedAt: Date.now() }; n++;
         });
-        save(KEY_ENTRIES, entries);
+        persistEntries();
         toast('Imported ' + n + ' day' + (n === 1 ? '' : 's') + '.');
         renderStreakPill();
       } catch (e) { toast('That file doesn’t look like a backup.'); }
@@ -617,72 +618,247 @@
   });
   $('wipe').addEventListener('click', function () {
     modal('Delete everything?', 'This removes every entry on this device. Export a backup first if you want to keep them.', null, function () {
-      entries = {}; save(KEY_ENTRIES, entries); localStorage.removeItem(KEY_CELEBRATED);
+      entries = {}; persistEntries(); localStorage.removeItem(KEY_CELEBRATED);
       toast('All entries deleted.'); renderStreakPill();
     }, 'Delete');
   });
 
-  /* ---------------- PASSCODE ---------------- */
-  function sha(str) {
-    if (window.crypto && crypto.subtle && window.isSecureContext) {
-      return crypto.subtle.digest('SHA-256', new TextEncoder().encode('tgt:' + str)).then(function (buf) {
-        return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  /* ---------------- VAULT: encryption at rest + Face ID ----------------
+     With a passcode set, entries are stored AES-GCM encrypted. A random data
+     key (DEK) is wrapped by a key derived from the passcode (PBKDF2), and
+     optionally by a secret the phone's Face ID / Touch ID produces (WebAuthn
+     PRF). While locked, nothing is in memory. */
+  var CRYPTO_OK = !!(window.crypto && crypto.subtle && window.isSecureContext);
+  var BIO_NAME = IOS ? 'Face ID' : 'fingerprint or face unlock';
+  var dekRaw = null, dekKey = null, pendingAdd = null, bootPending = null;
+  var PBKDF2_ITER = 150000;
+
+  function vault() { return load(KEY_VAULT, null); }
+  function isLocked() { return !!vault() && !dekKey; }
+  function rnd(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
+  function b64(u8) { var s = ''; for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); }
+  function unb64(str) { return Uint8Array.from(atob(str), function (c) { return c.charCodeAt(0); }); }
+  var enc = function (str) { return new TextEncoder().encode(str); };
+  var dec = function (u8) { return new TextDecoder().decode(u8); };
+  function pinKey(pin, salt, iter) {
+    return crypto.subtle.importKey('raw', enc('tgt:' + pin), 'PBKDF2', false, ['deriveKey']).then(function (k) {
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' }, k,
+        { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    });
+  }
+  function rawKey(bytes) { return crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']); }
+  function encrypt(key, bytes) {
+    var iv = rnd(12);
+    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, bytes).then(function (ct) { return { iv: b64(iv), ct: b64(new Uint8Array(ct)) }; });
+  }
+  function decrypt(key, box) {
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, key, unb64(box.ct)).then(function (b) { return new Uint8Array(b); });
+  }
+
+  var persistChain = Promise.resolve();
+  function persistEntries() {
+    var v = vault();
+    if (!v) { save(KEY_ENTRIES, entries); return persistChain; }
+    if (!dekKey) return persistChain;   // locked: nothing to write
+    var snapshot = JSON.stringify(entries);
+    persistChain = persistChain.then(function () {
+      return encrypt(dekKey, enc(snapshot)).then(function (box) {
+        var cur = vault(); if (!cur) return;
+        cur.data = box; save(KEY_VAULT, cur);
       });
+    }).catch(function () { toast('Could not save. Storage may be full.'); });
+    return persistChain;
+  }
+
+  function createVault(pin) {
+    dekRaw = rnd(32);
+    var salt = rnd(16);
+    return Promise.all([pinKey(pin, salt, PBKDF2_ITER), rawKey(dekRaw)]).then(function (keys) {
+      dekKey = keys[1];
+      return Promise.all([encrypt(keys[0], dekRaw), encrypt(dekKey, enc(JSON.stringify(entries)))]);
+    }).then(function (boxes) {
+      save(KEY_VAULT, { v: 1, len: pin.length, salt: b64(salt), iter: PBKDF2_ITER, wrapPin: boxes[0], wrapBio: null, data: boxes[1] });
+      localStorage.removeItem(KEY_ENTRIES);
+    });
+  }
+  function openWithDek(raw) {
+    var v = vault();
+    return rawKey(raw).then(function (key) {
+      return decrypt(key, v.data).then(function (plain) {
+        dekRaw = raw; dekKey = key;
+        entries = JSON.parse(dec(plain)) || {};
+      });
+    });
+  }
+  function unlockPin(pin) {
+    var v = vault();
+    return pinKey(pin, unb64(v.salt), v.iter).then(function (kek) { return decrypt(kek, v.wrapPin); }).then(openWithDek);
+  }
+  function changePin(pin) {
+    var v = vault(), salt = rnd(16);
+    return pinKey(pin, salt, PBKDF2_ITER).then(function (kek) { return encrypt(kek, dekRaw); }).then(function (box) {
+      v.salt = b64(salt); v.iter = PBKDF2_ITER; v.len = pin.length; v.wrapPin = box; save(KEY_VAULT, v);
+    });
+  }
+  function removeVault() {
+    save(KEY_ENTRIES, entries);
+    localStorage.removeItem(KEY_VAULT);
+    dekRaw = null; dekKey = null;
+  }
+  function lock() {
+    if (!vault()) return;
+    dekRaw = null; dekKey = null; entries = {};
+    stopMic();
+    $('note').value = '';
+    showLock();
+  }
+
+  /* ---- Face ID / Touch ID via WebAuthn PRF ---- */
+  function bioAvailable() {
+    if (!CRYPTO_OK || !window.PublicKeyCredential || !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return Promise.resolve(false);
+    return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; });
+  }
+  function bioSecret(credId, salt) {
+    return navigator.credentials.get({ publicKey: {
+      challenge: rnd(32), rpId: location.hostname, timeout: 60000, userVerification: 'required',
+      allowCredentials: [{ id: unb64(credId), type: 'public-key', transports: ['internal'] }],
+      extensions: { prf: { eval: { first: unb64(salt) } } }
+    } }).then(function (cred) {
+      var ext = cred.getClientExtensionResults();
+      if (!ext.prf || !ext.prf.results || !ext.prf.results.first) throw new Error('This device can’t unlock with ' + BIO_NAME + ' yet.');
+      return new Uint8Array(ext.prf.results.first);
+    });
+  }
+  function enrollBio() {
+    var v = vault(); if (!v || !dekRaw) return Promise.reject(new Error('Set a passcode first.'));
+    var prfSalt = rnd(32);
+    return navigator.credentials.create({ publicKey: {
+      challenge: rnd(32), rp: { name: 'Three Good Things', id: location.hostname },
+      user: { id: rnd(16), name: 'me', displayName: 'Me' },
+      pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+      timeout: 60000, extensions: { prf: {} }
+    } }).then(function (cred) {
+      var ext = cred.getClientExtensionResults();
+      if (!ext.prf || !ext.prf.enabled) throw new Error(BIO_NAME + ' unlock isn’t supported on this device yet (needs iOS 18 or newer).');
+      var credId = b64(new Uint8Array(cred.rawId));
+      return bioSecret(credId, b64(prfSalt)).then(function (secret) {
+        return rawKey(secret).then(function (kek) { return encrypt(kek, dekRaw); }).then(function (box) {
+          var cur = vault(); cur.wrapBio = { credId: credId, salt: b64(prfSalt), box: box }; save(KEY_VAULT, cur);
+        });
+      });
+    });
+  }
+  function unlockBio() {
+    var v = vault(); if (!v || !v.wrapBio) return Promise.reject(new Error('no bio'));
+    return bioSecret(v.wrapBio.credId, v.wrapBio.salt).then(rawKey).then(function (kek) { return decrypt(kek, v.wrapBio.box); }).then(openWithDek);
+  }
+
+  /* ---- Settings: privacy card ---- */
+  function renderPrivacy() {
+    var v = vault();
+    var status = $('privacy-status');
+    if (!CRYPTO_OK) {
+      status.textContent = 'Encryption needs HTTPS. Open the journal from its https:// address to set a passcode.';
+      $('pin-set').hidden = true; $('pin-clear').hidden = true; $('bio-enable').hidden = true; $('bio-disable').hidden = true; return;
     }
-    // Fallback (non-secure contexts only): simple string hash. Better than plaintext, not cryptographic.
-    var h = 5381; for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
-    return Promise.resolve('djb2:' + (h >>> 0).toString(16));
+    $('pin-set').hidden = false;
+    $('pin-set').textContent = v ? 'Change passcode' : 'Set a passcode';
+    $('pin-clear').hidden = !v;
+    $('bio-disable').hidden = !(v && v.wrapBio);
+    $('bio-enable').hidden = true;
+    if (v) {
+      status.textContent = 'Your entries are encrypted on this device. Unlock with your passcode' + (v.wrapBio ? ' or ' + BIO_NAME + '.' : '.');
+      if (!v.wrapBio) bioAvailable().then(function (ok) { $('bio-enable').hidden = !ok; $('bio-enable').textContent = 'Add ' + BIO_NAME; });
+    } else {
+      status.textContent = 'Entries stay on this device and are never uploaded. Add a passcode to encrypt them, so a borrowed phone or a backup can’t reveal them.';
+    }
   }
   $('pin-set').addEventListener('click', function () {
-    modal('Set a passcode', 'Four to six digits. You’ll need it each time you open the journal.', '', function (val) {
-      if (!/^\d{4,6}$/.test(val)) { toast('Use 4 to 6 digits.'); return; }
-      sha(val).then(function (h) { save(KEY_PIN, { hash: h, len: val.length }); renderSettings(); toast('Passcode set.'); });
-    }, 'Save');
+    var existing = !!vault();
+    modal(existing ? 'New passcode' : 'Set a passcode',
+      'Four to eight digits. Your entries will be encrypted with it. If you forget it there is no reset, so keep a backup (Settings → Export).',
+      '', function (val) {
+        if (!/^\d{4,8}$/.test(val)) { toast('Use 4 to 8 digits.'); return; }
+        var p = existing ? changePin(val) : createVault(val);
+        p.then(function () { renderPrivacy(); toast(existing ? 'Passcode changed.' : 'Passcode set. Entries are now encrypted.'); })
+         .then(function () { if (!existing) return bioAvailable().then(function (ok) { if (ok) offerBio(); }); })
+         .catch(function (e) { toast(e.message || 'Could not set passcode.'); });
+      }, 'Save');
+  });
+  function offerBio() {
+    modal('Unlock with ' + BIO_NAME + '?', 'Faster than typing the passcode. Your passcode still works as a backup.', null, function () {
+      enrollBio().then(function () { renderPrivacy(); toast(BIO_NAME + ' is on.'); }).catch(function (e) { toast(e.message || 'Could not enable ' + BIO_NAME + '.'); });
+    }, 'Turn on');
+  }
+  $('bio-enable').addEventListener('click', offerBio);
+  $('bio-disable').addEventListener('click', function () {
+    var v = vault(); if (!v) return; v.wrapBio = null; save(KEY_VAULT, v); renderPrivacy(); toast(BIO_NAME + ' unlock removed.');
   });
   $('pin-clear').addEventListener('click', function () {
-    modal('Remove passcode?', 'Anyone with this phone unlocked will be able to open the journal.', null, function () {
-      localStorage.removeItem(KEY_PIN); renderSettings(); toast('Passcode removed.');
+    modal('Turn off passcode?', 'Entries will be stored unencrypted again, and anyone with this phone unlocked can read them.', null, function () {
+      removeVault(); renderPrivacy(); toast('Passcode off.');
     }, 'Remove');
   });
 
-  var pinBuf = '';
+  /* ---- Lock screen ---- */
+  var pinBuf = '', unlocking = false;
   function showLock() {
-    var pin = load(KEY_PIN, null);
-    if (!pin) return;
+    var v = vault(); if (!v) return;
     pinBuf = '';
-    $('lock-hint').textContent = 'Enter your passcode';
+    document.documentElement.classList.add('locked');
+    $('lock-hint').textContent = pendingAdd ? 'Unlock to add what you just said' : 'Enter your passcode';
     var dots = $('lock-dots'); dots.innerHTML = '';
-    for (var i = 0; i < pin.len; i++) dots.appendChild(document.createElement('span'));
+    for (var i = 0; i < v.len; i++) dots.appendChild(document.createElement('span'));
+    $('lock-bio').hidden = !v.wrapBio;
+    if (v.wrapBio) $('lock-bio').textContent = 'Unlock with ' + BIO_NAME;
     $('lock').hidden = false;
     $('app').setAttribute('aria-hidden', 'true');
+    if (v.wrapBio) tryBio(true);
   }
-  function hideLock() { $('lock').hidden = true; $('app').removeAttribute('aria-hidden'); lockedAt = 0; if (currentView === 'today') renderToday(); }
+  function tryBio(auto) {
+    if (unlocking) return; unlocking = true;
+    unlockBio().then(onUnlocked).catch(function (e) {
+      if (!auto) $('lock-hint').textContent = (e && e.name === 'NotAllowedError') ? BIO_NAME + ' cancelled. Use your passcode.' : 'Use your passcode';
+    }).then(function () { unlocking = false; });
+  }
+  $('lock-bio').addEventListener('click', function () { tryBio(false); });
+  function onUnlocked() {
+    $('lock').hidden = true;
+    document.documentElement.classList.remove('locked');
+    $('app').removeAttribute('aria-hidden');
+    lockedAt = 0;
+    if (bootPending) { var b = bootPending; bootPending = null; b(); }
+    else if (currentView === 'today') renderToday(); else show(currentView, false);
+    renderStreakPill();
+    if (pendingAdd) { var t = pendingAdd; pendingAdd = null; quickAdd(t); }
+  }
   $('keypad').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
-    var pin = load(KEY_PIN, null); if (!pin) { hideLock(); return; }
+    var v = vault(); if (!v) { onUnlocked(); return; }
+    if (unlocking) return;
     if (b.dataset.key === 'del') pinBuf = pinBuf.slice(0, -1);
-    else if (pinBuf.length < pin.len) pinBuf += b.dataset.key;
+    else if (pinBuf.length < v.len) pinBuf += b.dataset.key;
     var spans = $('lock-dots').children;
     for (var i = 0; i < spans.length; i++) spans[i].classList.toggle('on', i < pinBuf.length);
-    if (pinBuf.length === pin.len) {
-      sha(pinBuf).then(function (h) {
-        if (h === pin.hash) { hideLock(); }
-        else {
-          $('lock-dots').classList.add('shake');
-          $('lock-hint').textContent = 'Try again';
-          setTimeout(function () {
-            $('lock-dots').classList.remove('shake'); pinBuf = '';
-            for (var i = 0; i < spans.length; i++) spans[i].classList.remove('on');
-          }, 450);
-        }
+    if (pinBuf.length === v.len) {
+      unlocking = true;
+      var attempt = pinBuf;
+      unlockPin(attempt).then(function () { unlocking = false; onUnlocked(); }).catch(function () {
+        unlocking = false;
+        $('lock-dots').classList.add('shake');
+        $('lock-hint').textContent = 'Try again';
+        setTimeout(function () {
+          $('lock-dots').classList.remove('shake'); pinBuf = '';
+          for (var i = 0; i < spans.length; i++) spans[i].classList.remove('on');
+        }, 450);
       });
     }
   });
   document.addEventListener('visibilitychange', function () {
-    if (!load(KEY_PIN, null)) return;
-    if (document.hidden) { lockedAt = Date.now(); stopMic(); }
-    else if (lockedAt && Date.now() - lockedAt > LOCK_AFTER_MS) showLock();
-    else if (!document.hidden) { if (currentView === 'today') renderToday(false); }
+    if (document.hidden) { lockedAt = Date.now(); stopMic(); saveNow(); return; }
+    if (vault() && lockedAt && Date.now() - lockedAt > LOCK_AFTER_MS) { lock(); return; }
+    if (currentView === 'today') renderToday(false);
   });
 
   /* ---------------- MODAL + TOAST ---------------- */
@@ -749,10 +925,21 @@
     show(v === 'journal' || v === 'insights' || v === 'settings' ? v : 'today', v !== 'morning');
   }
   var params = new URLSearchParams(location.search);
-  showLock();
-  if (params.has('add')) quickAdd(params.get('add'));
-  else route(params.get('view') || '');
+  function startApp() {
+    if (params.has('add')) quickAdd(params.get('add'));
+    else route(params.get('view') || '');
+  }
+  if (vault()) {
+    if (params.has('add')) pendingAdd = String(params.get('add') || '').trim() || null;
+    bootPending = function () { route(params.get('view') || ''); };
+    showLock();
+  } else {
+    if (localStorage.getItem('tgt.pin')) localStorage.removeItem('tgt.pin'); // pre-vault passcode format
+    entries = load(KEY_ENTRIES, {});
+    startApp();
+  }
   if (params.has('view') || params.has('add')) history.replaceState(null, '', location.pathname);
+  document.addEventListener('touchstart', function () {}, { passive: true }); // enables :active on iOS
 
   // Keep "today" honest if the app stays open past midnight.
   setInterval(function () {
